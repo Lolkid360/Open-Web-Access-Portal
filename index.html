@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Access Portal</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: #f4f4f4; 
+        }
+        #url-input {
+            width: 70%;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        #browser-frame {
+            width: 100%;
+            height: 800px;
+            border: none;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <h2>🌐 Open Web Access</h2>
+    <input type="text" id="url-input" placeholder="Enter website URL">
+    <button onclick="loadUrl()">Access</button>
+    <div id="status"></div>
+    <iframe id="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+
+    <script>
+        const CORS_PROXIES = [
+            'https://cors-anywhere.herokuapp.com/',
+            'https://api.allorigins.win/raw?url=',
+            'https://crossorigin.me/'
+        ];
+
+        const statusEl = document.getElementById('status');
+        const browserFrame = document.getElementById('browser-frame');
+        let currentProxyIndex = 0;
+
+        async function loadUrl() {
+            const urlInput = document.getElementById('url-input');
+            const targetUrl = urlInput.value.trim();
+
+            if (!targetUrl) {
+                alert('Please enter a valid URL');
+                return;
+            }
+
+            try {
+                statusEl.textContent = 'Accessing website...';
+                
+                const proxyUrl = CORS_PROXIES[currentProxyIndex] + targetUrl;
+                
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`Access failed: ${response.status}`);
+                }
+
+                const htmlContent = await response.text();
+                
+                // Advanced content modification
+                const modifiedContent = transformContent(htmlContent, targetUrl);
+                
+                browserFrame.srcdoc = modifiedContent;
+                statusEl.textContent = `Accessed: ${targetUrl}`;
+                
+                currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+            } catch (error) {
+                console.error('Access error:', error);
+                statusEl.textContent = `Error: Unable to access site. Try another proxy.`;
+            }
+        }
+
+        function transformContent(html, baseUrl) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+
+            // Rewrite URLs to be absolute
+            ['a', 'link', 'script', 'img', 'iframe'].forEach(tag => {
+                tempDiv.querySelectorAll(tag).forEach(el => {
+                    ['href', 'src'].forEach(attr => {
+                        if (el.hasAttribute(attr)) {
+                            try {
+                                el.setAttribute(attr, new URL(el.getAttribute(attr), baseUrl).href);
+                            } catch {}
+                        }
+                    });
+                });
+            });
+
+            return tempDiv.innerHTML;
+        }
+    </script>
+</body>
+</html>
