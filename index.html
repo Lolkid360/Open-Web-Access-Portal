@@ -18,31 +18,41 @@
         #browser-frame {
             width: 100%;
             height: 800px;
-            border: none;
+            border: 1px solid #ddd;
             background: white;
+        }
+        #status {
+            margin: 10px 0;
+            color: #666;
         }
     </style>
 </head>
 <body>
-    <h2>🌐 Open Web Access</h2>
-    <input type="text" id="url-input" placeholder="Enter website URL">
+    <h2>🌐 Web Access Portal</h2>
+    <input type="text" id="url-input" placeholder="Enter website URL (https://example.com)">
     <button onclick="loadUrl()">Access</button>
     <div id="status"></div>
     <iframe id="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
 
     <script>
         const CORS_PROXIES = [
-            'https://cors-anywhere.herokuapp.com/',
             'https://api.allorigins.win/raw?url=',
-            'https://crossorigin.me/'
+            'https://corsproxy.io/?',
+            'https://cors-anywhere.herokuapp.com/'
         ];
 
         const statusEl = document.getElementById('status');
         const browserFrame = document.getElementById('browser-frame');
-        let currentProxyIndex = 0;
+        const urlInput = document.getElementById('url-input');
+
+        // Ensure URL starts with protocol
+        urlInput.addEventListener('input', function() {
+            if (this.value && !this.value.startsWith('http://') && !this.value.startsWith('https://')) {
+                this.value = 'https://' + this.value;
+            }
+        });
 
         async function loadUrl() {
-            const urlInput = document.getElementById('url-input');
             const targetUrl = urlInput.value.trim();
 
             if (!targetUrl) {
@@ -50,30 +60,51 @@
                 return;
             }
 
+            // Validate URL
             try {
-                statusEl.textContent = 'Accessing website...';
-                
-                const proxyUrl = CORS_PROXIES[currentProxyIndex] + targetUrl;
-                
-                const response = await fetch(proxyUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`Access failed: ${response.status}`);
-                }
-
-                const htmlContent = await response.text();
-                
-                // Advanced content modification
-                const modifiedContent = transformContent(htmlContent, targetUrl);
-                
-                browserFrame.srcdoc = modifiedContent;
-                statusEl.textContent = `Accessed: ${targetUrl}`;
-                
-                currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
-            } catch (error) {
-                console.error('Access error:', error);
-                statusEl.textContent = `Error: Unable to access site. Try another proxy.`;
+                new URL(targetUrl);
+            } catch {
+                alert('Invalid URL. Please use a full URL with http:// or https://');
+                return;
             }
+
+            statusEl.textContent = 'Attempting to access website...';
+            browserFrame.srcdoc = ''; // Clear previous content
+
+            // Try multiple proxy methods
+            for (let proxyUrl of CORS_PROXIES) {
+                try {
+                    statusEl.textContent = `Trying proxy: ${proxyUrl}`;
+                    
+                    const fullProxyUrl = proxyUrl + encodeURIComponent(targetUrl);
+                    
+                    const response = await fetch(fullProxyUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const htmlContent = await response.text();
+                    
+                    // Basic content transformation
+                    const transformedContent = transformContent(htmlContent, targetUrl);
+                    
+                    browserFrame.srcdoc = transformedContent;
+                    statusEl.textContent = `Successfully loaded: ${targetUrl}`;
+                    return; // Exit after successful load
+                } catch (error) {
+                    console.warn(`Proxy failed: ${proxyUrl}`, error);
+                    continue; // Try next proxy
+                }
+            }
+
+            // If all proxies fail
+            statusEl.textContent = 'Failed to access website. Please try again or check the URL.';
         }
 
         function transformContent(html, baseUrl) {
@@ -86,12 +117,16 @@
                     ['href', 'src'].forEach(attr => {
                         if (el.hasAttribute(attr)) {
                             try {
-                                el.setAttribute(attr, new URL(el.getAttribute(attr), baseUrl).href);
+                                const fullUrl = new URL(el.getAttribute(attr), baseUrl).href;
+                                el.setAttribute(attr, fullUrl);
                             } catch {}
                         }
                     });
                 });
             });
+
+            // Remove potential security risks
+            tempDiv.querySelectorAll('script').forEach(el => el.remove());
 
             return tempDiv.innerHTML;
         }
